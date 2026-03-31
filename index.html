@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPB 勝率計算ツール</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Oswald:wght@400;600&display=swap');
+
+:root {
+  --bg: #0d0f14;
+  --surface: #141720;
+  --surface2: #1c2030;
+  --surface3: #242840;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --accent: #e8c84a;
+  --accent2: #4a8fe8;
+  --text: #f0f2f8;
+  --text2: #8a90a8;
+  --text3: #555a70;
+  --home: #4a8fe8;
+  --away: #e84a4a;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; min-height: 100vh; }
+
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+.header-logo { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 600; letter-spacing: 0.08em; color: var(--accent); }
+.header-sub { font-size: 11px; color: var(--text2); letter-spacing: 0.05em; text-transform: uppercase; }
+.step-nav { margin-left: auto; display: flex; gap: 4px; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border2); cursor: pointer; transition: all 0.2s; }
+.step-dot.active { background: var(--accent); border-color: var(--accent); }
+.step-dot.done { background: var(--accent2); border-color: var(--accent2); }
+
+.container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+.step-panel { display: none; animation: fadeIn 0.3s ease; }
+.step-panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.step-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px; }
+.step-num { font-family: 'Oswald', sans-serif; font-size: 40px; font-weight: 600; color: var(--accent); line-height: 1; opacity: 0.4; }
+.step-title { font-size: 20px; font-weight: 700; }
+.step-desc { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.team-col { background: var(--surface2); border-radius: 8px; padding: 16px; border: 1px solid var(--border); }
+.team-col.home { border-top: 3px solid var(--home); }
+.team-col.away { border-top: 3px solid var(--away); }
+
+.team-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; margin-bottom: 12px; }
+.team-badge.home { background: rgba(74,143,232,0.15); color: var(--home); }
+.team-badge.away { background: rgba(232,74,74,0.15); color: var(--away); }
+
+label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; margin-top: 10px; }
+label:first-of-type { margin-top: 0; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; background: var(--surface3); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text); font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px; padding: 8px 10px; outline: none; transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+select option { background: var(--surface2); }
+textarea { resize: vertical; min-height: 60px; line-height: 1.6; }
+
+.field-row { display: grid; gap: 10px; }
+.field-row.two { grid-template-columns: 1fr 1fr; }
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.field-row.four { grid-template-columns: repeat(4, 1fr); }
+
+.nav-row { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+.btn { padding: 10px 28px; border-radius: 7px; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; }
+.btn-primary { background: var(--accent); color: #0d0f14; }
+.btn-primary:hover { background: #f0d060; transform: translateY(-1px); }
+.btn-secondary { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
+.btn-secondary:hover { border-color: var(--text2); color: var(--text); }
+.btn-calc { background: linear-gradient(135deg, #4a8fe8, #6a60e8); color: #fff; padding: 12px 36px; font-size: 14px; }
+.btn-calc:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* AI fetch */
+.name-row { display: flex; gap: 8px; align-items: flex-end; }
+.name-row input { flex: 1; }
+.btn-fetch { padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--accent); background: rgba(232,200,74,0.08); color: var(--accent); white-space: nowrap; transition: all 0.2s; display: flex; align-items: center; gap: 6px; margin-top: 15px; }
+.btn-fetch:hover { background: rgba(232,200,74,0.18); }
+.btn-fetch:disabled { opacity: 0.4; cursor: not-allowed; }
+.fetch-status { font-size: 11px; margin-top: 5px; min-height: 16px; margin-bottom: 6px; }
+.fetch-ok { color: #4ae87a; }
+.fetch-err { color: var(--away); }
+.fetch-loading { color: var(--accent); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { width: 11px; height: 11px; border: 2px solid rgba(232,200,74,0.3); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+input.autofilled { border-color: rgba(74,200,120,0.5); background: rgba(74,200,120,0.04); }
+
+/* Result */
+.result-hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 16px; position: relative; }
+.result-hero::before { content: 'WIN PROBABILITY'; position: absolute; top: 16px; right: 20px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: 0.12em; color: var(--text3); }
+
+.matchup-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; margin-bottom: 24px; }
+.team-result { text-align: center; }
+.team-result-name { font-family: 'Oswald', sans-serif; font-size: 22px; font-weight: 600; letter-spacing: 0.04em; }
+.team-result-name.home { color: var(--home); }
+.team-result-name.away { color: var(--away); }
+.team-result-pct { font-family: 'Oswald', sans-serif; font-size: 52px; font-weight: 600; line-height: 1; margin-top: 4px; }
+.team-result-pct.home { color: var(--home); }
+.team-result-pct.away { color: var(--away); }
+.vs-label { font-family: 'Oswald', sans-serif; font-size: 18px; color: var(--text3); }
+
+.prob-bar { height: 10px; border-radius: 5px; display: flex; overflow: hidden; margin-bottom: 8px; }
+.prob-bar-home { background: var(--home); transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+.prob-bar-away { background: var(--away); transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+.prob-bar-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); }
+
+/* 予想スコア */
+.score-predict-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 16px; }
+.score-predict-title { font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+.score-predict-body { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; }
+.score-team { text-align: center; }
+.score-team-name { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+.score-runs { font-family: 'Oswald', sans-serif; font-size: 56px; font-weight: 600; line-height: 1; }
+.score-runs.home { color: var(--home); }
+.score-runs.away { color: var(--away); }
+.score-range { font-size: 11px; color: var(--text3); margin-top: 5px; }
+.score-center { text-align: center; }
+.score-dash { font-family: 'Oswald', sans-serif; font-size: 28px; color: var(--text3); }
+.score-diff { margin-top: 8px; font-size: 13px; font-weight: 500; padding: 3px 10px; border-radius: 4px; display: inline-block; }
+.score-diff.home { background: rgba(74,143,232,0.12); color: var(--home); }
+.score-diff.away { background: rgba(232,74,74,0.12); color: var(--away); }
+.score-diff.even { background: rgba(255,255,255,0.05); color: var(--text3); }
+.score-sub { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+.verdict-box { background: linear-gradient(135deg, rgba(74,143,232,0.08), rgba(106,96,232,0.08)); border: 1px solid rgba(74,143,232,0.2); border-radius: 8px; padding: 14px 18px; margin-top: 16px; font-size: 13px; line-height: 1.7; }
+.verdict-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--accent2); text-transform: uppercase; margin-bottom: 6px; }
+
+.factor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+.factor-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.factor-card-title { font-size: 11px; color: var(--text2); margin-bottom: 10px; letter-spacing: 0.05em; }
+.factor-row-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.factor-row-item:last-child { margin-bottom: 0; }
+.factor-label { font-size: 11px; color: var(--text2); min-width: 80px; }
+.factor-bar-wrap { flex: 1; height: 5px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+.factor-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.factor-val { font-size: 11px; font-weight: 500; min-width: 46px; text-align: right; }
+
+.score-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.score-table th { text-align: left; color: var(--text3); font-weight: 400; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border); }
+.score-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+.score-table tr:last-child td { border-bottom: none; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+.tag-home { background: rgba(74,143,232,0.15); color: var(--home); }
+.tag-away { background: rgba(232,74,74,0.15); color: var(--away); }
+.tag-even { background: rgba(255,255,255,0.05); color: var(--text2); }
+
+.weather-opts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.weather-opt { padding: 6px 12px; background: var(--surface3); border: 1px solid var(--border2); border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text2); transition: all 0.15s; }
+.weather-opt:hover { border-color: var(--accent); color: var(--accent); }
+.weather-opt.sel { background: rgba(232,200,74,0.1); border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">NPB WIN CALC</div>
+    <div class="header-sub">プロ野球 勝率計算ツール</div>
+  </div>
+  <div class="step-nav" id="stepNav">
+    <div class="step-dot active" onclick="goStep(0)" title="試合情報"></div>
+    <div class="step-dot" onclick="goStep(1)" title="先発投手"></div>
+    <div class="step-dot" onclick="goStep(2)" title="ブルペン"></div>
+    <div class="step-dot" onclick="goStep(3)" title="打線"></div>
+    <div class="step-dot" onclick="goStep(4)" title="対戦相性"></div>
+    <div class="step-dot" onclick="goStep(5)" title="結果"></div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- STEP 0 -->
+<div class="step-panel active" id="step0">
+  <div class="step-header">
+    <div class="step-num">01</div>
+    <div><div class="step-title">試合情報</div><div class="step-desc">日程・球場・天気を入力してください</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">対戦カード</div>
+    <div class="two-col">
+      <div>
+        <label>ホームチーム</label>
+        <select id="homeTeam">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ">
+            <option>読売ジャイアンツ</option><option>阪神タイガース</option>
+            <option>広島東洋カープ</option><option>横浜DeNAベイスターズ</option>
+            <option>中日ドラゴンズ</option><option>東京ヤクルトスワローズ</option>
+          </optgroup>
+          <optgroup label="パ・リーグ">
+            <option>福岡ソフトバンクホークス</option><option>東北楽天ゴールデンイーグルス</option>
+            <option>千葉ロッテマリーンズ</option><option>埼玉西武ライオンズ</option>
+            <option>オリックス・バファローズ</option><option>北海道日本ハムファイターズ</option>
+          </optgroup>
+        </select>
+      </div>
+      <div>
+        <label>ビジターチーム</label>
+        <select id="awayTeam">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ">
+            <option>読売ジャイアンツ</option><option>阪神タイガース</option>
+            <option>広島東洋カープ</option><option>横浜DeNAベイスターズ</option>
+            <option>中日ドラゴンズ</option><option>東京ヤクルトスワローズ</option>
+          </optgroup>
+          <optgroup label="パ・リーグ">
+            <option>福岡ソフトバンクホークス</option><option>東北楽天ゴールデンイーグルス</option>
+            <option>千葉ロッテマリーンズ</option><option>埼玉西武ライオンズ</option>
+            <option>オリックス・バファローズ</option><option>北海道日本ハムファイターズ</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+    <div class="two-col" style="margin-top:12px;">
+      <div>
+        <label>試合日</label>
+        <input type="text" id="gameDate" placeholder="例：2025年5月3日">
+      </div>
+      <div>
+        <label>球場</label>
+        <select id="stadium">
+          <option value="dome">東京ドーム</option><option value="open">神宮球場</option>
+          <option value="open">横浜スタジアム</option><option value="open">甲子園球場</option>
+          <option value="open">マツダスタジアム</option><option value="dome">バンテリンドーム</option>
+          <option value="dome">みずほPayPayドーム</option><option value="open">楽天モバイルパーク</option>
+          <option value="open">ZOZOマリンスタジアム</option><option value="open">ベルーナドーム</option>
+          <option value="dome">京セラドーム</option><option value="dome">エスコンフィールド</option>
+          <option value="other">その他</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">天気・環境</div>
+    <div class="two-col">
+      <div>
+        <label>天気</label>
+        <div class="weather-opts">
+          <div class="weather-opt sel" data-val="sunny" onclick="selWeather(this)">☀ 晴れ</div>
+          <div class="weather-opt" data-val="cloudy" onclick="selWeather(this)">☁ 曇り</div>
+          <div class="weather-opt" data-val="rain" onclick="selWeather(this)">🌧 小雨</div>
+          <div class="weather-opt" data-val="cold" onclick="selWeather(this)">❄ 寒冷</div>
+          <div class="weather-opt" data-val="hot" onclick="selWeather(this)">🌡 猛暑</div>
+        </div>
+        <input type="hidden" id="weatherVal" value="sunny">
+      </div>
+      <div>
+        <label>風向補正（屋外球場のみ）</label>
+        <select id="windEffect">
+          <option value="0">なし / ドーム</option>
+          <option value="1">追い風（打者有利）</option>
+          <option value="-1">向かい風（投手有利）</option>
+          <option value="0.3">横風（やや打者有利）</option>
+        </select>
+        <label>気温（℃）</label>
+        <input type="number" id="temperature" placeholder="例：22" step="1">
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">連戦・疲労</div>
+    <div class="two-col">
+      <div>
+        <label>ホームの連戦日数</label>
+        <select id="homeFatigue">
+          <option value="0">初戦 / 休み明け</option><option value="1">2連戦目</option>
+          <option value="2">3連戦目</option><option value="3">4連戦目以上</option>
+        </select>
+        <label>直前の長距離移動</label>
+        <select id="homeMoved"><option value="0">なし</option><option value="1">あり</option></select>
+      </div>
+      <div>
+        <label>ビジターの連戦日数</label>
+        <select id="awayFatigue">
+          <option value="0">初戦 / 休み明け</option><option value="1">2連戦目</option>
+          <option value="2">3連戦目</option><option value="3">4連戦目以上</option>
+        </select>
+        <label>直前の長距離移動</label>
+        <select id="awayMoved"><option value="0">なし</option><option value="1">あり</option></select>
+      </div>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-primary" onclick="goStep(1)">次へ →</button>
+  </div>
+</div>
+
+<!-- STEP 1: 先発投手 -->
+<div class="step-panel" id="step1">
+  <div class="step-header">
+    <div class="step-num">02</div>
+    <div><div class="step-title">先発投手成績</div><div class="step-desc">投手名を入力して「AI取得」を押すと成績が自動入力されます</div></div>
+  </div>
+  <div class="two-col">
+    <div class="team-col home">
+      <div class="team-badge home" id="sp-home-badge">HOME</div>
+      <label>投手名</label>
+      <div class="name-row">
+        <input type="text" id="hSpName" placeholder="例：山本 由伸" oninput="clearFetchStatus('h')">
+        <button class="btn-fetch" id="hFetchBtn" onclick="fetchPitcher('h')">
+          <span id="hFetchIcon">⚡</span> AI取得
+        </button>
+      </div>
+      <div class="fetch-status" id="hFetchStatus"></div>
+      <div class="field-row four">
+        <div><label>ERA</label><input type="number" id="hSpEra" placeholder="2.85" step="0.01"></div>
+        <div><label>WHIP</label><input type="number" id="hSpWhip" placeholder="1.05" step="0.01"></div>
+        <div><label>K/9</label><input type="number" id="hSpK9" placeholder="9.2" step="0.1"></div>
+        <div><label>BB/9</label><input type="number" id="hSpBb9" placeholder="2.1" step="0.1"></div>
+      </div>
+      <div class="field-row three" style="margin-top:0;">
+        <div><label>被打率</label><input type="number" id="hSpBavg" placeholder=".215" step="0.001"></div>
+        <div><label>QS率%</label><input type="number" id="hSpQs" placeholder="62" step="1"></div>
+        <div><label>直近5戦ERA</label><input type="number" id="hSpRecent" placeholder="2.50" step="0.01"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>対右被打率</label><input type="number" id="hSpVsR" placeholder=".220" step="0.001"></div>
+        <div><label>対左被打率</label><input type="number" id="hSpVsL" placeholder=".210" step="0.001"></div>
+      </div>
+    </div>
+    <div class="team-col away">
+      <div class="team-badge away" id="sp-away-badge">AWAY</div>
+      <label>投手名</label>
+      <div class="name-row">
+        <input type="text" id="aSpName" placeholder="例：今永 昇太" oninput="clearFetchStatus('a')">
+        <button class="btn-fetch" id="aFetchBtn" onclick="fetchPitcher('a')">
+          <span id="aFetchIcon">⚡</span> AI取得
+        </button>
+      </div>
+      <div class="fetch-status" id="aFetchStatus"></div>
+      <div class="field-row four">
+        <div><label>ERA</label><input type="number" id="aSpEra" placeholder="3.10" step="0.01"></div>
+        <div><label>WHIP</label><input type="number" id="aSpWhip" placeholder="1.12" step="0.01"></div>
+        <div><label>K/9</label><input type="number" id="aSpK9" placeholder="8.8" step="0.1"></div>
+        <div><label>BB/9</label><input type="number" id="aSpBb9" placeholder="2.4" step="0.1"></div>
+      </div>
+      <div class="field-row three" style="margin-top:0;">
+        <div><label>被打率</label><input type="number" id="aSpBavg" placeholder=".225" step="0.001"></div>
+        <div><label>QS率%</label><input type="number" id="aSpQs" placeholder="55" step="1"></div>
+        <div><label>直近5戦ERA</label><input type="number" id="aSpRecent" placeholder="3.20" step="0.01"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>対右被打率</label><input type="number" id="aSpVsR" placeholder=".230" step="0.001"></div>
+        <div><label>対左被打率</label><input type="number" id="aSpVsL" placeholder=".220" step="0.001"></div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-secondary" onclick="goStep(0)">← 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(2)">次へ →</button>
+  </div>
+</div>
+
+<!-- STEP 2: ブルペン -->
+<div class="step-panel" id="step2">
+  <div class="step-header">
+    <div class="step-num">03</div>
+    <div><div class="step-title">ブルペン成績</div><div class="step-desc">チームブルペン全体の成績を入力してください</div></div>
+  </div>
+  <div class="two-col">
+    <div class="team-col home">
+      <div class="team-badge home" id="bp-home-badge">HOME</div>
+      <div class="field-row two">
+        <div><label>ブルペンERA</label><input type="number" id="hBpEra" placeholder="3.20" step="0.01"></div>
+        <div><label>WHIP</label><input type="number" id="hBpWhip" placeholder="1.18" step="0.01"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>被打率</label><input type="number" id="hBpBavg" placeholder=".235" step="0.001"></div>
+        <div><label>K/9</label><input type="number" id="hBpK9" placeholder="8.5" step="0.1"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>直近7日登板数</label><input type="number" id="hBpLoad" placeholder="5" step="1"></div>
+        <div><label>抑えERA</label><input type="number" id="hClEra" placeholder="1.80" step="0.01"></div>
+      </div>
+    </div>
+    <div class="team-col away">
+      <div class="team-badge away" id="bp-away-badge">AWAY</div>
+      <div class="field-row two">
+        <div><label>ブルペンERA</label><input type="number" id="aBpEra" placeholder="3.80" step="0.01"></div>
+        <div><label>WHIP</label><input type="number" id="aBpWhip" placeholder="1.28" step="0.01"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>被打率</label><input type="number" id="aBpBavg" placeholder=".248" step="0.001"></div>
+        <div><label>K/9</label><input type="number" id="aBpK9" placeholder="8.0" step="0.1"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>直近7日登板数</label><input type="number" id="aBpLoad" placeholder="6" step="1"></div>
+        <div><label>抑えERA</label><input type="number" id="aClEra" placeholder="2.50" step="0.01"></div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-secondary" onclick="goStep(1)">← 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(3)">次へ →</button>
+  </div>
+</div>
+
+<!-- STEP 3: 打線 -->
+<div class="step-panel" id="step3">
+  <div class="step-header">
+    <div class="step-num">04</div>
+    <div><div class="step-title">打線成績</div><div class="step-desc">チーム打撃成績を入力してください</div></div>
+  </div>
+  <div class="two-col">
+    <div class="team-col home">
+      <div class="team-badge home" id="bat-home-badge">HOME</div>
+      <div class="field-row two">
+        <div><label>チーム打率</label><input type="number" id="hBatAvg" placeholder=".260" step="0.001"></div>
+        <div><label>OPS</label><input type="number" id="hBatOps" placeholder=".730" step="0.001"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>得点圏打率</label><input type="number" id="hRisp" placeholder=".265" step="0.001"></div>
+        <div><label>本塁打（試合平均）</label><input type="number" id="hHr" placeholder="1.1" step="0.1"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>対左投手打率</label><input type="number" id="hVsL" placeholder=".255" step="0.001"></div>
+        <div><label>対右投手打率</label><input type="number" id="hVsR" placeholder=".262" step="0.001"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>三振率%</label><input type="number" id="hKpct" placeholder="20.5" step="0.1"></div>
+        <div><label>四球率%</label><input type="number" id="hBbpct" placeholder="8.2" step="0.1"></div>
+      </div>
+    </div>
+    <div class="team-col away">
+      <div class="team-badge away" id="bat-away-badge">AWAY</div>
+      <div class="field-row two">
+        <div><label>チーム打率</label><input type="number" id="aBatAvg" placeholder=".248" step="0.001"></div>
+        <div><label>OPS</label><input type="number" id="aBatOps" placeholder=".705" step="0.001"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>得点圏打率</label><input type="number" id="aRisp" placeholder=".252" step="0.001"></div>
+        <div><label>本塁打（試合平均）</label><input type="number" id="aHr" placeholder="0.9" step="0.1"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>対左投手打率</label><input type="number" id="aVsL" placeholder=".240" step="0.001"></div>
+        <div><label>対右投手打率</label><input type="number" id="aVsR" placeholder=".252" step="0.001"></div>
+      </div>
+      <div class="field-row two" style="margin-top:0;">
+        <div><label>三振率%</label><input type="number" id="aKpct" placeholder="22.0" step="0.1"></div>
+        <div><label>四球率%</label><input type="number" id="aBbpct" placeholder="7.5" step="0.1"></div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-secondary" onclick="goStep(2)">← 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(4)">次へ →</button>
+  </div>
+</div>
+
+<!-- STEP 4: 対戦相性 -->
+<div class="step-panel" id="step4">
+  <div class="step-header">
+    <div class="step-num">05</div>
+    <div><div class="step-title">対戦相性・直近トレンド</div><div class="step-desc">直近2〜3年の対戦データと球場別成績を入力してください</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">直近2〜3年の対戦成績</div>
+    <div class="two-col">
+      <div>
+        <label>ホームチーム 勝利数</label>
+        <input type="number" id="h2hWin" placeholder="例：15" step="1">
+        <label>ビジターチーム 勝利数</label>
+        <input type="number" id="h2hLoss" placeholder="例：12" step="1">
+      </div>
+      <div>
+        <label>ホームチームの球場別勝率</label>
+        <input type="number" id="hParkWinPct" placeholder="例：0.580" step="0.001">
+        <label>ビジターチームのアウェイ勝率</label>
+        <input type="number" id="aParkWinPct" placeholder="例：0.430" step="0.001">
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">今季チーム成績</div>
+    <div class="two-col">
+      <div>
+        <label>ホーム 今季勝率</label>
+        <input type="number" id="hSeasonWinPct" placeholder="例：0.560" step="0.001">
+        <label>直近10試合 勝利数</label>
+        <input type="number" id="hLast10" placeholder="例：7" step="1" min="0" max="10">
+      </div>
+      <div>
+        <label>ビジター 今季勝率</label>
+        <input type="number" id="aSeasonWinPct" placeholder="例：0.500" step="0.001">
+        <label>直近10試合 勝利数</label>
+        <input type="number" id="aLast10" placeholder="例：5" step="1" min="0" max="10">
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">その他補足</div>
+    <div class="two-col">
+      <div>
+        <label>ホーム 主力離脱選手</label>
+        <textarea id="hInjury" placeholder="例：4番・田中 右肘痛で欠場" rows="2"></textarea>
+      </div>
+      <div>
+        <label>ビジター 主力離脱選手</label>
+        <textarea id="aInjury" placeholder="例：なし" rows="2"></textarea>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <label>その他メモ</label>
+      <textarea id="notes" placeholder="例：消化試合、交流戦、ダブルヘッダー2戦目 など" rows="2"></textarea>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-secondary" onclick="goStep(3)">← 戻る</button>
+    <button class="btn btn-calc" onclick="calculate()">⚡ 勝率を計算する</button>
+  </div>
+</div>
+
+<!-- STEP 5: 結果 -->
+<div class="step-panel" id="step5">
+  <div class="step-header">
+    <div class="step-num">06</div>
+    <div><div class="step-title">勝率予測結果</div><div class="step-desc" id="resultSubtitle"></div></div>
+  </div>
+
+  <div class="result-hero">
+    <div class="matchup-row">
+      <div class="team-result">
+        <div class="team-result-name home" id="res-home-name">—</div>
+        <div class="team-result-pct home" id="res-home-pct">—%</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">HOME</div>
+      </div>
+      <div class="vs-label">VS</div>
+      <div class="team-result">
+        <div class="team-result-name away" id="res-away-name">—</div>
+        <div class="team-result-pct away" id="res-away-pct">—%</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">AWAY</div>
+      </div>
+    </div>
+    <div class="prob-bar">
+      <div class="prob-bar-home" id="bar-home" style="width:50%"></div>
+      <div class="prob-bar-away" id="bar-away" style="width:50%"></div>
+    </div>
+    <div class="prob-bar-labels">
+      <span id="bar-home-label">50%</span>
+      <span id="bar-away-label">50%</span>
+    </div>
+    <div class="verdict-box">
+      <div class="verdict-label">分析サマリー</div>
+      <div id="verdictText"></div>
+    </div>
+  </div>
+
+  <!-- 予想スコア -->
+  <div class="score-predict-card">
+    <div class="score-predict-title">予想スコア</div>
+    <div class="score-predict-body">
+      <div class="score-team">
+        <div class="score-team-name" id="score-home-name">HOME</div>
+        <div class="score-runs home" id="score-home-runs">—</div>
+        <div class="score-range" id="score-home-range"></div>
+      </div>
+      <div class="score-center">
+        <div class="score-dash">—</div>
+        <div class="score-diff even" id="scoreDiffBadge">点差</div>
+        <div class="score-sub">予想点差</div>
+      </div>
+      <div class="score-team">
+        <div class="score-team-name" id="score-away-name">AWAY</div>
+        <div class="score-runs away" id="score-away-runs">—</div>
+        <div class="score-range" id="score-away-range"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="factor-grid">
+    <div class="factor-card"><div class="factor-card-title">▸ 先発投手</div><div id="spFactors"></div></div>
+    <div class="factor-card"><div class="factor-card-title">▸ ブルペン</div><div id="bpFactors"></div></div>
+    <div class="factor-card"><div class="factor-card-title">▸ 打線</div><div id="batFactors"></div></div>
+    <div class="factor-card"><div class="factor-card-title">▸ 状況・相性</div><div id="situFactors"></div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">スコア詳細</div>
+    <table class="score-table" id="scoreTable"></table>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-secondary" onclick="goStep(4)">← 入力に戻る</button>
+    <button class="btn btn-primary" onclick="goStep(0)">最初からやり直す</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+let currentStep = 0;
+
+function goStep(n) {
+  document.getElementById('step'+currentStep).classList.remove('active');
+  document.getElementById('step'+n).classList.add('active');
+  document.querySelectorAll('.step-dot').forEach((d,i)=>{
+    d.classList.remove('active','done');
+    if(i<n) d.classList.add('done');
+    if(i===n) d.classList.add('active');
+  });
+  currentStep=n;
+  window.scrollTo({top:0,behavior:'smooth'});
+  updateTeamLabels();
+}
+
+function selWeather(el) {
+  document.querySelectorAll('.weather-opt').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById('weatherVal').value=el.dataset.val;
+}
+
+function updateTeamLabels() {
+  const h=document.getElementById('homeTeam').value||'HOME';
+  const a=document.getElementById('awayTeam').value||'AWAY';
+  [['sp-home-badge',h],['sp-away-badge',a],['bp-home-badge',h],['bp-away-badge',a],
+   ['bat-home-badge',h],['bat-away-badge',a]].forEach(([id,v])=>{
+    const el=document.getElementById(id); if(el) el.textContent=v;
+  });
+}
+document.getElementById('homeTeam').addEventListener('change',updateTeamLabels);
+document.getElementById('awayTeam').addEventListener('change',updateTeamLabels);
+
+function gv(id,fb=0){const v=parseFloat(document.getElementById(id)?.value);return isNaN(v)?fb:v;}
+function gs(id){return document.getElementById(id)?.value?.trim()||'';}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function norm(v,bad,good){return clamp((good-v)/(good-bad),0,1);}
+
+function clearFetchStatus(side) {
+  document.getElementById(side+'FetchStatus').textContent='';
+  [`${side}SpEra`,`${side}SpWhip`,`${side}SpK9`,`${side}SpBb9`,`${side}SpBavg`,
+   `${side}SpQs`,`${side}SpRecent`,`${side}SpVsR`,`${side}SpVsL`]
+    .forEach(id=>document.getElementById(id)?.classList.remove('autofilled'));
+}
+
+async function fetchPitcher(side) {
+  const name=document.getElementById(side+'SpName').value.trim();
+  if(!name){setFetchStatus(side,'投手名を入力してください','err');return;}
+  const btn=document.getElementById(side+'FetchBtn');
+  const icon=document.getElementById(side+'FetchIcon');
+  btn.disabled=true;
+  icon.innerHTML='<span class="spinner"></span>';
+  setFetchStatus(side,'AIが成績を検索中...','loading');
+
+  const team=side==='h'?(gs('homeTeam')||'NPBチーム'):(gs('awayTeam')||'NPBチーム');
+  const prompt=`あなたはNPBプロ野球の統計専門家です。
+投手名: ${name}（${team}所属、日本プロ野球）
+
+この投手の直近シーズンの成績を以下のJSON形式のみで返してください。不明な場合はNPBリーグ平均値を使用してください。説明文は不要です。
+
+{"era":数値,"whip":数値,"k9":数値,"bb9":数値,"bavg":数値,"qs":整数,"recent":数値,"vsR":数値,"vsL":数値,"note":"補足"}`;
+
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:400,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data=await res.json();
+    const text=data.content?.map(c=>c.text||'').join('')||'';
+    const m=text.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error('no JSON');
+    const st=JSON.parse(m[0]);
+    [
+      [side+'SpEra',st.era],[side+'SpWhip',st.whip],[side+'SpK9',st.k9],
+      [side+'SpBb9',st.bb9],[side+'SpBavg',st.bavg],[side+'SpQs',st.qs],
+      [side+'SpRecent',st.recent],[side+'SpVsR',st.vsR],[side+'SpVsL',st.vsL]
+    ].forEach(([id,val])=>{
+      if(val==null) return;
+      const el=document.getElementById(id);
+      if(!el) return;
+      el.value=val;
+      el.classList.add('autofilled');
+    });
+    setFetchStatus(side,`✓ 成績を自動入力しました${st.note?'（'+st.note+'）':''}`, 'ok');
+  } catch(e) {
+    setFetchStatus(side,'取得できませんでした。手動で入力してください','err');
+  } finally {
+    btn.disabled=false;
+    icon.textContent='⚡';
+  }
+}
+
+function setFetchStatus(side,msg,type) {
+  const el=document.getElementById(side+'FetchStatus');
+  el.textContent=msg;
+  el.className='fetch-status '+(type==='ok'?'fetch-ok':type==='err'?'fetch-err':'fetch-loading');
+}
+
+function scoreStarter(era,whip,k9,bb9,bavg,qs,recent){
+  return norm(era,7,1)*0.22+norm(whip,2,0.8)*0.18+clamp(k9/12,0,1)*0.15+
+    norm(bb9,5,0.5)*0.12+norm(bavg,0.34,0.16)*0.13+clamp(qs/100,0,1)*0.10+norm(recent,7,1)*0.10;
+}
+function scoreBullpen(era,whip,bavg,k9,load,clEra){
+  return norm(era,6.5,1)*0.28+norm(whip,2,0.8)*0.20+norm(bavg,0.32,0.17)*0.15+
+    clamp(k9/12,0,1)*0.12+norm(load,10,0)*0.10+norm(clEra,5.5,0.5)*0.15;
+}
+function scoreBatting(avg,ops,risp,hr,kpct,bbpct,vsR,vsL){
+  return clamp(avg/0.32,0,1)*0.15+clamp(ops/0.95,0,1)*0.25+clamp(risp/0.32,0,1)*0.18+
+    clamp(hr/2,0,1)*0.12+norm(kpct,35,10)*0.10+clamp(bbpct/15,0,1)*0.08+
+    clamp(vsR/0.32,0,1)*0.06+clamp(vsL/0.32,0,1)*0.06;
+}
+
+function estimateRuns(batScore,pitchScore){
+  // NPB平均3.8点/試合を基準に、打線力と相手投手力で補正
+  return Math.max(0.5, 3.8 + (batScore-0.5)*4.0 + (0.5-pitchScore)*3.0);
+}
+
+function calculate(){
+  const homeName=gs('homeTeam')||'ホーム';
+  const awayName=gs('awayTeam')||'ビジター';
+  const hSpName=gs('hSpName')||'先発投手';
+  const aSpName=gs('aSpName')||'先発投手';
+
+  const hSp=scoreStarter(gv('hSpEra',4.5),gv('hSpWhip',1.35),gv('hSpK9',7),gv('hSpBb9',3),gv('hSpBavg',0.255),gv('hSpQs',50),gv('hSpRecent',4.5));
+  const aSp=scoreStarter(gv('aSpEra',4.5),gv('aSpWhip',1.35),gv('aSpK9',7),gv('aSpBb9',3),gv('aSpBavg',0.255),gv('aSpQs',50),gv('aSpRecent',4.5));
+  const hBp=scoreBullpen(gv('hBpEra',4),gv('hBpWhip',1.3),gv('hBpBavg',0.25),gv('hBpK9',7.5),gv('hBpLoad',5),gv('hClEra',3));
+  const aBp=scoreBullpen(gv('aBpEra',4),gv('aBpWhip',1.3),gv('aBpBavg',0.25),gv('aBpK9',7.5),gv('aBpLoad',5),gv('aClEra',3));
+  const hBat=scoreBatting(gv('hBatAvg',0.25),gv('hBatOps',0.7),gv('hRisp',0.255),gv('hHr',0.9),gv('hKpct',22),gv('hBbpct',7.5),gv('hVsR',0.252),gv('hVsL',0.248));
+  const aBat=scoreBatting(gv('aBatAvg',0.25),gv('aBatOps',0.7),gv('aRisp',0.255),gv('aHr',0.9),gv('aKpct',22),gv('aBbpct',7.5),gv('aVsR',0.252),gv('aVsL',0.248));
+
+  const h2hW=gv('h2hWin',0),h2hL=gv('h2hLoss',0),h2hT=h2hW+h2hL;
+  const h2hAdv=h2hT>0?(h2hW/h2hT-0.5)*0.5:0;
+  const hPark=gv('hParkWinPct',gv('hSeasonWinPct',0.5));
+  const aPark=gv('aParkWinPct',gv('aSeasonWinPct',0.5));
+  const parkAdv=(hPark-aPark)*0.15;
+  const trendAdv=((gv('hSeasonWinPct',0.5)-gv('aSeasonWinPct',0.5))*0.6+((gv('hLast10',5)-gv('aLast10',5))/10)*0.4)*0.15;
+  const hFat=gv('homeFatigue',0)*0.008+gv('homeMoved',0)*0.012;
+  const aFat=gv('awayFatigue',0)*0.008+gv('awayMoved',0)*0.012;
+  const fatAdv=aFat-hFat;
+  const weather=gs('weatherVal');
+  let weatherAdv=0;
+  if(weather==='rain') weatherAdv=0.02;
+  if(weather==='hot') weatherAdv=-0.01;
+  if(weather==='cold') weatherAdv=0.008;
+  const windAdv=gv('windEffect',0)*0.01;
+  const HFA=0.04;
+
+  const spDiff=(hSp-aSp)*0.35;
+  const bpDiff=(hBp-aBp)*0.20;
+  const batDiff=(hBat-aBat)*0.28;
+  const situDiff=h2hAdv+parkAdv+trendAdv+fatAdv+weatherAdv+windAdv;
+  const rawAdv=spDiff+bpDiff+batDiff+situDiff+HFA;
+  const homeWin=clamp(0.5+rawAdv*1.8,0.05,0.95);
+  const awayWin=1-homeWin;
+  const homeP=Math.round(homeWin*100);
+  const awayP=100-homeP;
+
+  // 予想得点: 先発6イニング×ブルペン3イニングの加重平均で投手力算出
+  const hPitchPow=hSp*0.67+hBp*0.33;
+  const aPitchPow=aSp*0.67+aBp*0.33;
+  let hR=estimateRuns(hBat,aPitchPow);
+  let aR=estimateRuns(aBat,hPitchPow);
+  hR*=(1+HFA*0.5);
+  if(weather==='rain'){hR*=0.93;aR*=0.93;}
+  if(weather==='hot'){hR*=1.05;aR*=1.03;}
+  const wm=1+gv('windEffect',0)*0.04;
+  hR*=wm; aR*=wm;
+  hR*=(1-hFat*0.5); aR*=(1-aFat*0.5);
+  hR=Math.round(hR*10)/10;
+  aR=Math.round(aR*10)/10;
+  const diff=Math.round(Math.abs(hR-aR)*10)/10;
+  const sig=1.4;
+  const hLo=Math.max(0,Math.round((hR-sig)*10)/10);
+  const hHi=Math.round((hR+sig)*10)/10;
+  const aLo=Math.max(0,Math.round((aR-sig)*10)/10);
+  const aHi=Math.round((aR+sig)*10)/10;
+
+  // 表示
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setText('res-home-name',homeName); setText('res-away-name',awayName);
+  setText('res-home-pct',homeP+'%'); setText('res-away-pct',awayP+'%');
+  document.getElementById('bar-home').style.width=homeP+'%';
+  document.getElementById('bar-away').style.width=awayP+'%';
+  setText('bar-home-label',homeName+' '+homeP+'%');
+  setText('bar-away-label',awayP+'% '+awayName);
+  setText('resultSubtitle',`${homeName}（${hSpName}）vs ${awayName}（${aSpName}）`);
+
+  // 予想スコア
+  setText('score-home-name',homeName); setText('score-away-name',awayName);
+  setText('score-home-runs',hR.toFixed(1)); setText('score-away-runs',aR.toFixed(1));
+  setText('score-home-range',`レンジ: ${hLo}〜${hHi}点`);
+  setText('score-away-range',`レンジ: ${aLo}〜${aHi}点`);
+  const db=document.getElementById('scoreDiffBadge');
+  if(diff<0.2){db.textContent='ほぼ同点';db.className='score-diff even';}
+  else if(hR>aR){db.textContent=`+${diff} ${homeName}`;db.className='score-diff home';}
+  else{db.textContent=`+${diff} ${awayName}`;db.className='score-diff away';}
+
+  // 総評
+  let vp=[];
+  const winner=homeWin>=0.5?homeName:awayName;
+  const winPct=homeWin>=0.5?homeP:awayP;
+  if(winPct>=65) vp.push(`<b>${winner}</b>が明確に有利な試合です（予測勝率 ${winPct}%）。`);
+  else if(winPct>=57) vp.push(`<b>${winner}</b>がやや有利ですが、接戦の可能性もあります（予測勝率 ${winPct}%）。`);
+  else vp.push(`両チーム互角に近い接戦が予想されます（${homeName} ${homeP}% / ${awayName} ${awayP}%）。`);
+  if(Math.abs(spDiff)>0.04) vp.push(`先発投手の差（${spDiff>0?homeName:awayName}有利）が鍵になりそうです。`);
+  if(Math.abs(bpDiff)>0.03) vp.push(`ブルペン力も${bpDiff>0?homeName:awayName}に傾いています。`);
+  if(h2hAdv>0.02) vp.push(`直近の対戦相性はホームの${homeName}が優勢です。`);
+  if(h2hAdv<-0.02) vp.push(`直近の対戦相性はビジターの${awayName}が優勢です。`);
+  if(aFat>hFat+0.01) vp.push(`${awayName}は疲労・移動がマイナスに働く可能性があります。`);
+  vp.push(`予想スコアは <b>${homeName} ${hR.toFixed(1)}</b> 対 <b>${awayName} ${aR.toFixed(1)}</b>（予想点差 ${diff.toFixed(1)} 点）です。`);
+  document.getElementById('verdictText').innerHTML=vp.join(' ');
+
+  // 要因別バー
+  renderFactors('spFactors',[
+    {name:hSpName,val:hSp,type:'score'},
+    {name:aSpName,val:aSp,type:'score_inv'},
+    {name:'先発有利',val:spDiff,type:'diff',homeName,awayName},
+  ]);
+  renderFactors('bpFactors',[
+    {name:'HOMEブルペン',val:hBp,type:'score'},
+    {name:'AWAYブルペン',val:aBp,type:'score_inv'},
+    {name:'ブルペン有利',val:bpDiff,type:'diff',homeName,awayName},
+  ]);
+  renderFactors('batFactors',[
+    {name:'HOME打線',val:hBat,type:'score'},
+    {name:'AWAY打線',val:aBat,type:'score_inv'},
+    {name:'打線有利',val:batDiff,type:'diff',homeName,awayName},
+  ]);
+  renderFactors('situFactors',[
+    {name:'ホームアドバンテージ',val:HFA,type:'diff',homeName,awayName},
+    {name:'対戦相性',val:h2hAdv,type:'diff',homeName,awayName},
+    {name:'球場適性',val:parkAdv,type:'diff',homeName,awayName},
+    {name:'勝率トレンド',val:trendAdv,type:'diff',homeName,awayName},
+    {name:'疲労度',val:fatAdv,type:'diff',homeName,awayName},
+    {name:'天気・風',val:weatherAdv+windAdv,type:'diff',homeName,awayName},
+  ]);
+
+  const rows=[
+    ['要因','重み','HOMEスコア','AWAYスコア','有利'],
+    ['先発投手','35%',hSp.toFixed(3),aSp.toFixed(3),d2l(spDiff,homeName,awayName)],
+    ['ブルペン','20%',hBp.toFixed(3),aBp.toFixed(3),d2l(bpDiff,homeName,awayName)],
+    ['打線','28%',hBat.toFixed(3),aBat.toFixed(3),d2l(batDiff,homeName,awayName)],
+    ['対戦相性','7%','—','—',d2l(h2hAdv,homeName,awayName)],
+    ['球場・トレンド','5%','—','—',d2l(parkAdv+trendAdv,homeName,awayName)],
+    ['状況補正','5%','—','—',d2l(fatAdv+weatherAdv+windAdv+HFA,homeName,awayName)],
+    ['予想得点','—',hR.toFixed(1)+'点',aR.toFixed(1)+'点',d2l(hR-aR,homeName,awayName)],
+  ];
+  document.getElementById('scoreTable').innerHTML=rows.map((r,i)=>
+    i===0?`<tr>${r.map(c=>`<th>${c}</th>`).join('')}</tr>`
+         :`<tr>${r.map((c,j)=>`<td${j===4?' style="font-weight:500;"':''}>${c}</td>`).join('')}</tr>`
+  ).join('');
+
+  goStep(5);
+}
+
+function d2l(diff,h,a){
+  if(Math.abs(diff)<0.005) return '<span class="tag tag-even">互角</span>';
+  return diff>0?`<span class="tag tag-home">${h}</span>`:`<span class="tag tag-away">${a}</span>`;
+}
+
+function renderFactors(id,items){
+  document.getElementById(id).innerHTML=items.map(item=>{
+    if(item.type==='score'||item.type==='score_inv'){
+      const pct=Math.round(item.val*100);
+      const color=item.type==='score'?'var(--home)':'var(--away)';
+      return `<div class="factor-row-item"><span class="factor-label">${item.name}</span><div class="factor-bar-wrap"><div class="factor-bar-fill" style="width:${pct}%;background:${color};"></div></div><span class="factor-val" style="color:${color};">${item.val.toFixed(3)}</span></div>`;
+    }
+    const pct=Math.min(100,Math.round(Math.abs(item.val)/0.08*100));
+    const color=item.val>0?'var(--home)':item.val<0?'var(--away)':'var(--text3)';
+    const sign=item.val>=0?'+':'';
+    return `<div class="factor-row-item"><span class="factor-label">${item.name}</span><div class="factor-bar-wrap"><div class="factor-bar-fill" style="width:${pct}%;background:${color};"></div></div><span class="factor-val" style="color:${color};">${sign}${(item.val*100).toFixed(1)}pt</span></div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
